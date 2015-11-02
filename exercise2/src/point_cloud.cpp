@@ -74,7 +74,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::
     }	
    
     pcl::toROSMsg(cloud, output);
-    output.header.frame_id = "odom";
+    output.header.frame_id = "kinect";
     pcl_pub.publish(output);
 
   }
