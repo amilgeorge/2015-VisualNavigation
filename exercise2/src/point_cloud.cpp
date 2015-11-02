@@ -6,100 +6,81 @@
 #include <image_geometry/pinhole_camera_model.h>
 #include <sensor_msgs/distortion_models.h>
 #include <message_filters/subscriber.h>
+#include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/time_synchronizer.h>
+#include <pcl/point_cloud.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <sensor_msgs/PointCloud2.h>
 
 image_transport::Publisher image_pub;
+ros::Publisher pcl_pub;
 
-void imageCallback(const sensor_msgs::ImageConstPtr& msg)
+void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::ImageConstPtr& depth_msg)
 {
   try
   {
     
-    sensor_msgs::CameraInfoPtr camera = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo());
-    camera->D.push_back(0.186463);
-    camera->D.push_back(-0.367619);
-    camera->D.push_back(-0.004393);
-    camera->D.push_back(0.003571);
-    camera->D.push_back(0.00);
-
-    camera->K[0] = 518.230686; 
-    camera->K[1] = 0.000000;
-    camera->K[2] = 320.132471;
-    camera->K[3] = 0.000000;
-    camera->K[4] = 517.464309;
-    camera->K[5] = 255.336121;
-    camera->K[6] = 0.000000;
-    camera->K[7] = 0.000000;
-    camera->K[8] = 1.000000;
-
-    camera->height = 480;
-    camera->width  = 640;
+    cv::Mat rgb_img = cv_bridge::toCvShare(rgb_msg, "bgr8")->image;
+    cv::Mat depth_img = cv_bridge::toCvShare(depth_msg)->image;
     
-    camera->distortion_model = 	sensor_msgs::distortion_models::PLUMB_BOB;
+    //ROS_ERROR("Encoding from '%s'.", cv_bridge::toCvCopy(rgb_msg)->encoding.c_str());
+    //cv::Mat depth_img = cv::Mat( cv::Mat::ones(700,700,CV_8UC3));
 
-    camera->P[0] = 527.235474; 	
-    camera->P[1] = 0.000000;	
-    camera->P[2] = 321.808769;	
-    camera->P[3] = 0.000000;	
-    camera->P[4] = 0.000000;	
-    camera->P[5] = 529.605774;	
-    camera->P[6] = 253.378534;	
-    camera->P[7] = 0.000000;	
-    camera->P[8] = 0.000000;	
-    camera->P[9] = 0.000000;	
-    camera->P[10] = 1.000000;	
-    camera->P[11] = 0.000000;
-
-    camera->R[0]= 1.000000 ;    	
-    camera->R[1]= 0.000000;    	
-    camera->R[2]= 0.000000;    	
-    camera->R[3]= 0.000000;    	
-    camera->R[4]= 1.000000;    	
-    camera->R[5]= 0.000000;    	
-    camera->R[6]= 0.000000;    	
-    camera->R[7]= 0.000000;    	
-    camera->R[8]= 1.000000;    	
-    image_geometry::PinholeCameraModel cam_model;
-    cam_model.fromCameraInfo(camera);
-    cv::Mat img = cv_bridge::toCvShare(msg, "bgr8")->image;
-    cv::Mat rectified_img = cv::Mat( cv::Mat::ones(img.rows,img.cols,CV_8UC3));	
-    cam_model.rectifyImage(img,rectified_img);
-    //ROS_INFO("%f\n", camera_info->K[0]);
-    cv::imshow("view", img);
-    cv::waitKey(30);
-    cv::imshow("undistorted_view", rectified_img);
-    cv::waitKey(30);
-
-    ros::Time time = ros::Time::now();	
-    cv_bridge::CvImage cvi;
-    cvi.header.stamp = time;
-    cvi.header.frame_id = "image";
-    cvi.encoding = "bgr8";
-    cvi.image = rectified_img;
+    //ros::Time time = ros::Time::now();	
+    //cv_bridge::CvImage cvi;
+    //cvi.header.stamp = time;
+    //cvi.header.frame_id = "image";
+    //cvi.encoding = "bgr8";
+    //cvi.image = rectified_img;
     
-    sensor_msgs::Image undist_sensor_msg;
-    cvi.toImageMsg(undist_sensor_msg);
-    image_pub.publish(undist_sensor_msg);
+    //sensor_msgs::Image undist_sensor_msg;
+    //cvi.toImageMsg(undist_sensor_msg);
+    //image_pub.publish(undist_sensor_msg);
+    pcl::PointCloud<pcl::PointXYZRGB> cloud;
+    sensor_msgs::PointCloud2 output;	
+
+    cloud.width  = rgb_img.cols;
+    cloud.height = rgb_img.rows;
+    cloud.points.resize(cloud.width * cloud.height);	
     
-    double fx = 525.0 ; // focal length x
-    double fy = 525.0 ; // focal length y
-    double cx = 319.5 ; // optical center x
-    double cy = 239.5 ; // optical center y
+    float fx = 525.0 ; // focal length x
+    float fy = 525.0 ; // focal length y
+    float cx = 319.5 ; // optical center x
+    float cy = 239.5 ; // optical center y
 
-    double factor = 1.0;
+    float factor = 1.0;
 
-    double X,Y,Z;	
-    for(int v=0;v<img.rows();v++){
-    	for(int u=0; u<img.cols(); u++){
+    float X,Y,Z;	
+    for(int v=0;v<rgb_img.rows;v++){
+    	for(int u=0; u<rgb_img.cols; u++){
+         cv::Vec3b color = rgb_img.at<cv::Vec3b>(v,u);
+	 float dval = depth_img.at<float>(v, u);
+	 //float dval = static_cast<float>(d); 		
 	 
+	 Z = dval/factor;
+	 X = (u - cx) * Z / fx;
+ 	 Y = (v - cy) * Z / fy;
+         int point_index = v * rgb_img.cols + u;
+   
+	 cloud.points[point_index].x = X;
+	 cloud.points[point_index].y = Y;
+	 cloud.points[point_index].z = Z;
+	 cloud.points[point_index].r = color[2];
+	 cloud.points[point_index].g = color[1];
+	 cloud.points[point_index].b = color[0];
+
+
 	}
     }	
-
+   
+    pcl::toROSMsg(cloud, output);
+    output.header.frame_id = "odom";
+    pcl_pub.publish(output);
 
   }
   catch (cv_bridge::Exception& e)
   {
-    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", msg->encoding.c_str());
+    ROS_ERROR("Could not convert from '%s' to 'bgr8'.", e.what());
   }
 }
 
@@ -107,22 +88,22 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "image_listener");
   ros::NodeHandle nh;
-  cv::namedWindow("view",cv::WINDOW_NORMAL);
-  cv::startWindowThread();
-
-  cv::namedWindow("undistorted_view",cv::WINDOW_NORMAL);
-  cv::startWindowThread();
 
 
-  image_transport::ImageTransport it(nh);
-  image_transport::Subscriber sub = it.subscribe("/camera/rgb/image_color", 1, imageCallback);
+  //image_transport::ImageTransport it(nh);
+  //image_transport::Subscriber sub = it.subscribe("/camera/rgb/image_color", 1, imageCallback);
 
-  message_filters::Subscriber<Image> image_sub(nh, "image", 1);
-  message_filters::Subscriber<CameraInfo> info_sub(nh, "camera_info", 1);
-  TimeSynchronizer<Image, CameraInfo> sync(image_sub, info_sub, 10); 
+  message_filters::Subscriber<sensor_msgs::Image> image_sub(nh, "/camera/rgb/image_color", 1);
+  message_filters::Subscriber<sensor_msgs::Image> depth_sub(nh, "/camera/depth/image", 1);
 
-  image_pub = it.advertise("/undistorted", 1);
+  
+  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> sync_policy;
+
+  message_filters::Synchronizer<sync_policy> sync(sync_policy(10), image_sub, depth_sub);
+  sync.registerCallback(boost::bind(&imageCallback,_1,_2));
+  
+  pcl_pub = nh.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);
+
   ros::spin();
-  cv::destroyWindow("view");
 }
 

@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_geometry
   pcl_conversions
   pcl_ros	
+  message_filters
 )
 
 ## System dependencies are found with CMake's conventions
@@ -135,6 +136,7 @@ include_directories(
 
 ## Declare a C++ executable
 add_executable(img_sub src/img_test.cpp)
+add_executable(point_cloud src/point_cloud.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
@@ -145,6 +147,8 @@ add_executable(img_sub src/img_test.cpp)
    ${catkin_LIBRARIES}
  )
 
+ target_link_libraries(point_cloud
+   ${catkin_LIBRARIES})
 #############
 ## Install ##
 #############
