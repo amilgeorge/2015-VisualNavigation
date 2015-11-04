@@ -26,19 +26,6 @@ void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::
     cv::Mat rgb_img = cv_bridge::toCvShare(rgb_msg, "bgr8")->image;
     cv::Mat depth_img = cv_bridge::toCvShare(depth_msg)->image;
     
-    //ROS_ERROR("Encoding from '%s'.", cv_bridge::toCvCopy(rgb_msg)->encoding.c_str());
-    //cv::Mat depth_img = cv::Mat( cv::Mat::ones(700,700,CV_8UC3));
-
-    //ros::Time time = ros::Time::now();	
-    //cv_bridge::CvImage cvi;
-    //cvi.header.stamp = time;
-    //cvi.header.frame_id = "image";
-    //cvi.encoding = "bgr8";
-    //cvi.image = rectified_img;
-    
-    //sensor_msgs::Image undist_sensor_msg;
-    //cvi.toImageMsg(undist_sensor_msg);
-    //image_pub.publish(undist_sensor_msg);
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
     sensor_msgs::PointCloud2 output;	
 
@@ -76,13 +63,10 @@ void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::
 	}
     }	
     sensor_msgs::PointCloud2 transformed_output;
-    //tf::StampedTransform transform;
     try{
       listener->waitForTransform("/world", "/kinect",
                                ros::Time::now(), ros::Duration(3));
 
-     // listener.lookupTransform("/world", "/kinect",
-       //                        ros::Time(0), transform);
     }
     catch (tf::TransformException &ex) {
       ROS_ERROR("%s",ex.what());
@@ -113,10 +97,6 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "image_listener");
   ros::NodeHandle nh;
-
-
-  //image_transport::ImageTransport it(nh);
-  //image_transport::Subscriber sub = it.subscribe("/camera/rgb/image_color", 1, imageCallback);
 
   message_filters::Subscriber<sensor_msgs::Image> image_sub(nh, "/camera/rgb/image_color", 1);
   message_filters::Subscriber<sensor_msgs::Image> depth_sub(nh, "/camera/depth/image", 1);
