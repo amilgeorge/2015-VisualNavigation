@@ -22,7 +22,9 @@ void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::
 {
   try
   {
-    
+    //cv_bridge::CvImagePtr rgb_img_ptr = cv_bridge::toCvCopy(depth_msg);
+    //ROS_ERROR("%s",rgb_img_ptr->header.frame_id.c_str());
+    ros::Time msg_time = rgb_msg->header.stamp; 
     cv::Mat rgb_img = cv_bridge::toCvShare(rgb_msg, "bgr8")->image;
     cv::Mat depth_img = cv_bridge::toCvShare(depth_msg)->image;
     
@@ -47,6 +49,9 @@ void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::
 	 float dval = depth_img.at<float>(v, u);
 	 //float dval = static_cast<float>(d); 		
 	 
+         if (dval < 0){
+	   continue;
+         } 
 	 Z = dval/factor;
 	 X = (u - cx) * Z / fx;
  	 Y = (v - cy) * Z / fy;
@@ -64,18 +69,19 @@ void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::
     }	
     sensor_msgs::PointCloud2 transformed_output;
     try{
-      listener->waitForTransform("/world", "/kinect",
-                               ros::Time::now(), ros::Duration(3));
+      listener->waitForTransform("/world", "/openni_rgb_optical_frame",
+                               msg_time, ros::Duration(.1));
 
     }
     catch (tf::TransformException &ex) {
       ROS_ERROR("%s",ex.what());
-      ros::Duration(1.0).sleep();
+      ROS_ERROR("Long wait ....");
+      //ros::Duration(1.0).sleep();
       return;
     }
 
     pcl::toROSMsg(cloud, output);
-    output.header.frame_id = "kinect";
+    output.header.frame_id = "openni_rgb_optical_frame";
 	
     //pcl::PointCloud<pcl::PointXYZRGB> transformed_cloud;
     pcl_ros::transformPointCloud("/world",output,transformed_output,*listener);
@@ -83,7 +89,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr& rgb_msg,const sensor_msgs::
     //pcl::toROSMsg(transformed_cloud, output);
     //output.header.frame_id = "world";
     
-
+    transformed_output.header.frame_id = "new_world";
     pcl_pub.publish(transformed_output);
 
   }
@@ -104,7 +110,7 @@ int main(int argc, char **argv)
   listener = new tf::TransformListener();
   typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> sync_policy;
 
-  message_filters::Synchronizer<sync_policy> sync(sync_policy(10), image_sub, depth_sub);
+  message_filters::Synchronizer<sync_policy> sync(sync_policy(1), image_sub, depth_sub);
   sync.registerCallback(boost::bind(&imageCallback,_1,_2));
   
   pcl_pub = nh.advertise<sensor_msgs::PointCloud2> ("pcl_output", 1);
