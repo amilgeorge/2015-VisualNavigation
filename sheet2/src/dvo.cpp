@@ -738,7 +738,7 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 //	std::cout << "t = " << t.transpose() << std::endl;
 //	std::cout << "R = " << rot << std::endl;
 
-	bool useNumericDerivative = false;
+	bool useNumericDerivative = true;
 
 	bool useGN = true;
 	bool useGD = false;
@@ -761,8 +761,8 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 		grayCur = grayCurPyramid[level];
 		depthCur = depthCurPyramid[level];
 		Eigen::Matrix3f kLevel = kPyramid[level];
-		std::cout << "level " << level << " (size " << depthRef.cols << "x"
-				<< depthRef.rows << ")" << std::endl;
+//		std::cout << "level " << level << " (size " << depthRef.cols << "x"
+//				<< depthRef.rows << ")" << std::endl;
 
 // compute gradient images
 		cv::Mat gradX;
@@ -775,7 +775,7 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 		Eigen::VectorXf previousResiduals;
 		for (int itr = 0; itr < numIterations; ++itr) {
 			// compute residuals and Jacobian
-			std::cout << "iteration " << itr << std::endl;
+//			std::cout << "iteration " << itr << std::endl;
 			Eigen::VectorXf residuals;
 			Eigen::MatrixXf J;
 
@@ -883,7 +883,7 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 
 	}
 	tmr = ((float) cv::getTickCount() - tmr) / cv::getTickFrequency();
-	ROS_ERROR_STREAM("runtime: " << tmr);
+	//ROS_ERROR_STREAM("runtime: " << tmr);
 
 	convertSE3ToTf(xi, rot, t);
 

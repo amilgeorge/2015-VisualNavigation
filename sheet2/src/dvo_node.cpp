@@ -29,6 +29,7 @@ cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
 Eigen::Matrix4f integeratedTransform = Eigen::Matrix4f::Identity();
 std::ofstream obtained_trajectory_file;
+int frame_counter = 0;
 
 void imagesToPointCloud(const cv::Mat& img_rgb, const cv::Mat& img_depth,
 		pcl::PointCloud<pcl::PointXYZRGB>::Ptr& cloud,
@@ -91,9 +92,14 @@ void imagesToPointCloud(const cv::Mat& img_rgb, const cv::Mat& img_depth,
 }
 
 void callback(const sensor_msgs::ImageConstPtr& image_rgb,
-		const sensor_msgs::ImageConstPtr& image_depth) {
+		const sensor_msgs::ImageConstPtr& image_depth,int frame_rate) {
 
-	std::cout << "Callback called" << std::endl;
+	frame_counter++;
+	if (frame_counter % frame_rate == 0){
+
+
+
+	//std::cout << c << std::endl;
 	Eigen::Matrix3f cameraMatrix;
 	cameraMatrix << 525.0, 0.0, 319.5, 0.0, 525.0, 239.5, 0.0, 0.0, 1.0;
 
@@ -138,8 +144,8 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb,
 
 	cloud->header.frame_id = "/world";
 	pcl::transformPointCloud(*cloud, *cloud, integeratedTransform);
-	ROS_ERROR_STREAM(
-			"IntegeratedTransform" << integeratedTransform << std::endl);
+//	ROS_ERROR_STREAM(
+//			"IntegeratedTransform" << integeratedTransform << std::endl);
 
 	Eigen::Matrix3f rot = integeratedTransform.block<3, 3>(0, 0);
 	Eigen::Vector3f	t = integeratedTransform.block<3, 1>(0, 3);
@@ -153,9 +159,10 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb,
 	ros::Time frame_time = image_rgb->header.stamp;
 	//Write in file
 	obtained_trajectory_file << frame_time << " " << t.transpose() << " " << q.w() << " " << q.x() <<" " << q.y() <<" " << q.z() <<  "\n";
-
+	obtained_trajectory_file.flush();
 
 	pub_pointcloud.publish(*cloud);
+	}
 
 }
 
@@ -163,9 +170,19 @@ int main(int argc, char** argv) {
 	std::cout << "Started-- in main" << std::endl;
 	ros::init(argc, argv, "sheet2_dvo_node");
 
-	obtained_trajectory_file.open("/work/obtained_trajectory.txt");
-
 	ros::NodeHandle nh("~");
+	int frame_rate = 1;
+	nh.getParam("frame_rate", frame_rate);
+
+	ROS_INFO("Frame Rate  %d", frame_rate);
+
+	char name[40];
+	sprintf(name, "/work/obtained_trajectory_%d.txt", frame_rate);
+
+	//std::string filename = std::string("/work/obtained_trajectory_"+std::to_string(frame_rate)+".txt");
+	obtained_trajectory_file.open(name);
+
+
 	message_filters::Subscriber<sensor_msgs::Image> image_rgb_sub(nh,
 			"/camera/rgb/image_color", 1);
 	message_filters::Subscriber<sensor_msgs::Image> image_depth_sub(nh,
@@ -176,7 +193,7 @@ int main(int argc, char** argv) {
 	// ApproximateTime takes a queue size as its constructor argument, hence MySyncPolicy(10)
 	message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(10),
 			image_rgb_sub, image_depth_sub);
-	sync.registerCallback(boost::bind(&callback, _1, _2));
+	sync.registerCallback(boost::bind(&callback, _1, _2,frame_rate));
 
 	pub_pointcloud = nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >(
 			"pointcloud", 1);
