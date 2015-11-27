@@ -11,7 +11,7 @@
 #include <opencv2/core/core.hpp>
 
 
-void alignImages( Eigen::Matrix4f& transform, const cv::Mat& grayRef, const cv::Mat& depthRef, const cv::Mat& grayCur, const cv::Mat& depthCur, const Eigen::Matrix3f& cameraMatrix );
+void alignImages( Eigen::Matrix4f& transform, const cv::Mat& grayRef, const cv::Mat& depthRef, const cv::Mat& grayCur, const cv::Mat& depthCur, const Eigen::Matrix3f& cameraMatrix, Eigen::MatrixXf& covariance );
 
 
 #endif // DVO_H__

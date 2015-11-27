@@ -651,19 +651,28 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
 		//{
 		int r_index = i/grayCur.cols ;
 		int c_index = i%grayCur.cols ;
+
+
+
 		//std::cout << "r:"<<r_index<<std::endl;
 		//std::cout << "c:"<<c_index<<std::endl;
 		if(zp(r_index, c_index)>0){
-		J(i, 0) = dxI(r_index, c_index) / zp(r_index, c_index);
-		J(i, 1) = dyI(r_index, c_index) / zp(r_index, c_index);
-		J(i, 2) = -(dxI(r_index, c_index) * xp(r_index, c_index) + dyI(r_index, c_index) * yp(r_index, c_index))
-				/ (zp(r_index, c_index) * zp(r_index, c_index));
-		J(i, 3) = -(dxI(r_index, c_index) * xp(r_index, c_index) * yp(r_index, c_index))
-				/ (zp(r_index, c_index) * zp(r_index, c_index)
-						- dyI(r_index, c_index) * (1 +std::pow((double)(yp(r_index, c_index) / zp(r_index, c_index)),2)));
-		J(i, 4) = dxI(r_index, c_index) * (1 + std::pow((double)(xp(r_index, c_index) / zp(r_index, c_index)),
-				2)) + (dyI(r_index, c_index) * xp(r_index, c_index) * yp(r_index, c_index)) / (zp(r_index, c_index)*zp(r_index, c_index));
-		J(i, 5) = (-dxI(r_index, c_index) * yp(r_index, c_index) + dyI(r_index, c_index) * xp(r_index, c_index)) / zp(r_index, c_index);
+
+			if(yImg(r_index,c_index) < grayCur.rows && yImg(r_index,c_index) >=0 && xImg(r_index,c_index) < grayCur.cols && xImg(r_index,c_index) >=0 ){
+
+			float dxI_val  = dxI(yImg(r_index,c_index),xImg(r_index,c_index));
+			float dyI_val  = dyI(yImg(r_index,c_index),xImg(r_index,c_index));
+			J(i, 0) = dxI_val / zp(r_index, c_index);
+			J(i, 1) = dyI_val / zp(r_index, c_index);
+			J(i, 2) = -(dxI_val * xp(r_index, c_index) + dyI_val * yp(r_index, c_index))
+					/ (zp(r_index, c_index) * zp(r_index, c_index));
+			J(i, 3) = -(dxI_val * xp(r_index, c_index) * yp(r_index, c_index))
+					/ (zp(r_index, c_index) * zp(r_index, c_index)
+							- dyI_val * (1 +std::pow((double)(yp(r_index, c_index) / zp(r_index, c_index)),2)));
+			J(i, 4) = dxI_val * (1 + std::pow((double)(xp(r_index, c_index) / zp(r_index, c_index)),
+					2)) + (dyI_val * xp(r_index, c_index) * yp(r_index, c_index)) / (zp(r_index, c_index)*zp(r_index, c_index));
+			J(i, 5) = (-dxI_val * yp(r_index, c_index) + dyI_val * xp(r_index, c_index)) / zp(r_index, c_index);
+			}
 		}
 		//}
 
@@ -679,7 +688,7 @@ void deriveAnalytic(const cv::Mat &grayRef, const cv::Mat &depthRef,
 // expects float images (CV_32FC1), grayscale scaled to [0,1], metrical depth
 void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 		const cv::Mat& imgDepthRef, const cv::Mat& imgGrayCur,
-		const cv::Mat& imgDepthCur, const Eigen::Matrix3f& cameraMatrix) {
+		const cv::Mat& imgDepthCur, const Eigen::Matrix3f& cameraMatrix,  Eigen::MatrixXf& covariance) {
 
 	cv::Mat grayRef = imgGrayRef;
 	cv::Mat grayCur = imgGrayCur;
@@ -738,13 +747,13 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 //	std::cout << "t = " << t.transpose() << std::endl;
 //	std::cout << "R = " << rot << std::endl;
 
-	bool useNumericDerivative = true;
+	bool useNumericDerivative = false;
 
-	bool useGN = true;
+	bool useGN = false;
 	bool useGD = false;
-	bool useLM = false;
+	bool useLM = true;
 	bool useWeights = true;
-	int numIterations = 20;
+	int numIterations = 40;
 	int maxLevel = numPyramidLevels - 1;
 	int minLevel = 1;
 
@@ -775,7 +784,7 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 		Eigen::VectorXf previousResiduals;
 		for (int itr = 0; itr < numIterations; ++itr) {
 			// compute residuals and Jacobian
-//			std::cout << "iteration " << itr << std::endl;
+			std::cout << "iteration " << itr << std::endl;
 			Eigen::VectorXf residuals;
 			Eigen::MatrixXf J;
 
@@ -827,7 +836,7 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 			if (useGD) {
 				// TODO: Implement Gradient Descent (step size 0.001)
 				float stepSize = 0.001;
-				delta = stepSize * b;
+				delta =  - stepSize * b;
 
 			}
 
@@ -838,12 +847,14 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 				// solve using Cholesky LDLT decomposition
 				//Solves Ax=b which is (ldlt decopostion of A)x=b
 				delta = -(A.ldlt().solve(b));
+				covariance=A.inverse();
 			}
 
 			if (useLM) {
 				//A is hessian matrix approximation
 				A = Jt * J;
-				delta = -(A + lambda * diagMatA) * b;
+				delta = -((A + lambda * diagMatA).inverse()) * b;
+				covariance=A.inverse();
 
 			}
 
@@ -851,7 +862,7 @@ void alignImages(Eigen::Matrix4f& transform, const cv::Mat& imgGrayRef,
 			// right-multiplicative increment on SE3
 			lastXi = xi;
 			xi = Sophus::SE3f::log(
-					Sophus::SE3f::exp(xi) * Sophus::SE3f::exp(delta));
+					Sophus::SE3f::exp(delta) * Sophus::SE3f::exp(xi)  );
 #if DEBUG_OUTPUT
 			ROS_ERROR_STREAM( "delta = " << delta.transpose() << " size = " << delta.rows() << " x " << delta.cols() << std::endl);
 			std::cout << "xi = " << xi.transpose() << std::endl;

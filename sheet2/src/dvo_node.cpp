@@ -24,12 +24,64 @@
 
 #include <fstream>
 #include <sophus/se3.hpp>
+#include <visualization_msgs/Marker.h>
 
 cv::Mat grayRef, depthRef;
 ros::Publisher pub_pointcloud;
 Eigen::Matrix4f integeratedTransform = Eigen::Matrix4f::Identity();
 std::ofstream obtained_trajectory_file;
 int frame_counter = 0;
+ros::Publisher marker_pub ;
+
+void drawCovariance(const Eigen::Vector3f& mean, const Eigen::MatrixXf& covMatrix,Eigen::Quaternionf q  )
+{
+
+   visualization_msgs::Marker tempMarker ;
+
+   tempMarker.type = visualization_msgs::Marker::SPHERE;
+   tempMarker.action=visualization_msgs::Marker::ADD;
+   tempMarker.id = 0;
+   tempMarker.ns="test" ;
+   tempMarker.header.frame_id = "/world";
+
+
+  tempMarker.pose.position.x = mean[0];
+  tempMarker.pose.position.y = mean[1];
+  tempMarker.pose.position.z = mean[2];
+  tempMarker.header.stamp = ros::Time::now();
+
+  tempMarker.color.r = 0.0f;
+  tempMarker.color.g = 1.0f;
+  tempMarker.color.b = 0.0f;
+  tempMarker.color.a = 1.0;
+
+  tempMarker.lifetime = ros::Duration();
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eig(covMatrix);
+  const Eigen::VectorXf& eigValues (eig.eigenvalues());
+  const Eigen::MatrixXf& eigVectors (eig.eigenvectors());
+
+  float angle = (std::atan2((double)eigVectors(1, 0), (double)eigVectors(0, 0)));
+
+  std::cout << "Eigen values1::" << eigValues[0] <<"Eigen Value2::" << eigValues[1] ;
+  double lengthMajor = std::sqrt((double)eigValues[0]);
+  double lengthMinor = std::sqrt((double)eigValues[1]);
+
+  tempMarker.scale.x = lengthMajor*1000;
+  tempMarker.scale.y = lengthMinor*1000;
+  tempMarker.scale.z = 1;
+
+  tempMarker.pose.orientation.w = cos(angle*0.5);
+ tempMarker.pose.orientation.z = sin(angle*0.5);
+
+//  tempMarker.pose.orientation.w = q.w();
+ // tempMarker.pose.orientation.x = q.x();
+ // tempMarker.pose.orientation.y = q.y();
+ // tempMarker.pose.orientation.z = q.z();
+
+  marker_pub.publish(tempMarker);
+
+}
 
 void imagesToPointCloud(const cv::Mat& img_rgb, const cv::Mat& img_depth,
 		pcl::PointCloud<pcl::PointXYZRGB>::Ptr& cloud,
@@ -121,10 +173,12 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb,
 
 	cv::Mat depthCur = img_depth_cv_ptr->image.clone();
 
+	Eigen::MatrixXf covarianceMatrix=Eigen::MatrixXf::Identity(6,6);
+
 	if (!grayRef.empty()) {
 		//std::cout << "Alligining images" << std::endl ;
 		alignImages(transform, grayRef, depthRef, grayCur, depthCur,
-				cameraMatrix);
+				cameraMatrix, covarianceMatrix);
 	}
 	grayRef = grayCur.clone();
 	depthRef = depthCur.clone();
@@ -135,7 +189,7 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb,
 
 
 
-	integeratedTransform = transform.inverse() * integeratedTransform;
+	integeratedTransform =  integeratedTransform * transform.inverse();
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud = pcl::PointCloud<
 			pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
 	imagesToPointCloud(img_rgb_cv_ptr->image, img_depth_cv_ptr->image, cloud);
@@ -162,6 +216,11 @@ void callback(const sensor_msgs::ImageConstPtr& image_rgb,
 	obtained_trajectory_file.flush();
 
 	pub_pointcloud.publish(*cloud);
+
+	std::cout << "Going to draw covariance" << covarianceMatrix << std::endl;
+		drawCovariance(t,covarianceMatrix,q) ;
+		pub_pointcloud.publish(*cloud);
+
 	}
 
 }
@@ -181,7 +240,7 @@ int main(int argc, char** argv) {
 
 	//std::string filename = std::string("/work/obtained_trajectory_"+std::to_string(frame_rate)+".txt");
 	obtained_trajectory_file.open(name);
-
+	marker_pub = nh.advertise<visualization_msgs::Marker>("/visualization_marker", 1);
 
 	message_filters::Subscriber<sensor_msgs::Image> image_rgb_sub(nh,
 			"/camera/rgb/image_color", 1);
