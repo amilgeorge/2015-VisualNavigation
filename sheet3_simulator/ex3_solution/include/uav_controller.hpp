@@ -85,7 +85,7 @@ private:
 
 
 	void imuCallback(const sensor_msgs::ImuConstPtr& msg) {
-		std::cout<<"IMU Callback"<<std::endl;
+
 		Eigen::Vector3d accel_measurement, gyro_measurement;
 		Matrix3 linear_acceleration_covariance(&msg->linear_acceleration_covariance[0]),angular_velocity_covariance(&msg->angular_velocity_covariance[0]);
 		double msg_time ;
@@ -95,7 +95,7 @@ private:
 		//tf::vectorMsgToEigen(msg->angular_velocity_covariance, angular_velocity_covariance);
 		//tf::vectorMsgToEigen(msg->linear_acceleration_covariance, linear_acceleration_covariance);
 		msg_time = msg->header.stamp.toSec();
-
+		std::cout<<"IMU Callback: Time:"<<msg_time<<std::endl;
 		double dt = msg_time - last_msg_time;
 		last_msg_time = msg_time;
 
@@ -103,6 +103,8 @@ private:
 		//TODO set covariance
 		ukf->predict(accel_measurement,gyro_measurement,dt,
 				linear_acceleration_covariance, angular_velocity_covariance);
+
+		std::cout<<"Acc Cov:"<<"\n"<<linear_acceleration_covariance<<"\n"<<"Vel Cov"<<"\n"<<angular_velocity_covariance<<std::endl;
 		sendControlSignal();
 
 
@@ -124,6 +126,7 @@ private:
 
 		ground_truth_pose = pose;
 		ground_truth_time = msg->header.stamp.toSec();
+		std::cout<<"Groundtruth Position"<<"\n"<<position;
 
 
 
@@ -287,13 +290,13 @@ public:
 		sequence_no=0 ;
 		last_msg_time = 0;
 
-		kp.col(0)=Vector3(4,4,4) ;
-		kd.col(0)=Vector3(1,1,1) ;
-		ki.col(0)=Vector3(0.0015,0.0015,0.0015) ;
+		kp.col(0)=Vector3(2,2,2) ;
+		kd.col(0)=Vector3(1.5,1.5,1.5) ;
+		ki.col(0)=Vector3(0.002,0.002,0.002) ;
 
 		std::cout << "kp::" << kp << "\nkd::" << kd << "\nki::" << ki <<std::endl;
 
-		use_ground_thruth_data = true;
+		use_ground_thruth_data = false;
 
 		ukf =new SE3UKF<_Scalar>();
 

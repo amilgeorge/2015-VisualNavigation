@@ -230,8 +230,8 @@ public:
 		pose =initial_pose;
 		Vector3 intital_linear_velocity(0.0,0.0,0.0);
 		linear_velocity = intital_linear_velocity;
-		Vector3 initial_accel_bias(0.0,0.0,0.0);
-		Vector3 initial_gyro_bias (0.0,0.0,0.0);
+		Vector3 initial_accel_bias(0.04,0.04,0.04);
+		Vector3 initial_gyro_bias (0.0033937,0.0033937,0.0033937);
 		accel_bias = initial_accel_bias;
 		gyro_bias = initial_gyro_bias;
 	}
@@ -292,7 +292,7 @@ public:
 			Vector3 translation_2;
 			translation_2 = translation_1 + sigma_linear_velocity[i] * dt;
 
-			std::cout<<"P["<<i<<"]:translation_2"<<"\n"<<translation_2<<"\n"<<translation_1<<"\n"<<"sigma_linear_vel"<<sigma_linear_velocity[i]<<"\n"<<"dt:"<<dt<<std::endl;
+			std::cout<<"P["<<i<<"]:translation_2"<<"\n"<<translation_2<<"\n translation_1\n"<<translation_1<<"\n"<<"sigma_linear_vel"<<linear_velocity<<"\n"<<"dt:"<<dt<<std::endl;
 
 			Vector3 linear_velocity_2;
 			linear_velocity_2 = sigma_linear_velocity[i] + (rotation_1 * (accel_measurement - sigma_accel_bias[i]) - g) * dt;
@@ -303,6 +303,8 @@ public:
 			//std::cout<<"P["<<i<<"] Rotataion: "<<rotation_2.<<std::endl;
 			sigma_pose[i] = SE3Type(rotation_2,translation_2);
 			sigma_linear_velocity[i] = linear_velocity_2;
+			//sigma_accel_bias[i] = exp(-dt) * sigma_accel_bias[i];
+			//sigma_gyro_bias[i] = exp(-dt) * sigma_gyro_bias[i];
 
 
 		}
@@ -310,8 +312,13 @@ public:
 		std::cout<<"P:Computing mean and covariance";
 		compute_mean_and_covariance();
 		std::cout<<"Translation"<<"\n"<<pose.translation()<<std::endl;
-		//covariance.block<3,3>(9,9) = covariance.block<3,3>(9,9) + accel_noise;
-		//covariance.block<3,3>(12,12) = covariance.block<3,3>(12,12)+gyro_noise;
+
+		Matrix3 acc_block;
+		Matrix3 gyroblock;
+		acc_block = covariance.block(6,6,3,3) + accel_noise;
+		gyroblock = covariance.block(3,3,3,3)+gyro_noise;
+		covariance.template block<3,3>(6,6) = acc_block;
+		covariance.template block<3,3>(3,3) = gyroblock;
 
 	//TODO What to do with process noise
 	}
@@ -330,17 +337,26 @@ public:
 		Matrix6 s_t ;
 		s_t =  measurement_noise + covariance.block(0,0,6,6) ;
 
+
 		Matrix15_6 sigma_t_x_z;
 		sigma_t_x_z = covariance.block(0,0,15,6);
 
 		Matrix15_6 Kt ;
 		Kt = sigma_t_x_z * s_t.inverse();
 
+		std::cout<<"S_t\n"<<s_t<<std::endl;
+		std::cout<<"sigma_t_x_z\n"<<sigma_t_x_z<<std::endl;
+		std::cout<<"Kt\n"<<Kt<<std::endl;
+
 		//TODO : Verify this step
 		Vector15 delta ;
 		delta = Kt* SE3Type::log(pose.inverse() * measured_pose);
 		Matrix15 sigma_t_dash ;
 		sigma_t_dash = covariance - Kt * s_t * Kt.transpose();
+
+		covariance = sigma_t_dash;
+
+		std::cout<<"sigma_t_dash\n"<<sigma_t_dash<<std::endl;
 
 		compute_sigma_points(delta);
 		compute_mean_and_covariance();
